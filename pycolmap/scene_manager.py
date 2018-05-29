@@ -32,6 +32,9 @@ class SceneManager:
         self.images = dict()
         self.name_to_image_id = dict()
 
+        self.last_camera_id = 0
+        self.last_image_id = 0
+
         # Nx3 array of point3D xyz's
         self.points3D = np.zeros((0, 3))
 
@@ -102,6 +105,7 @@ class SceneManager:
                 num_params = Camera.GetNumParams(camera_type)
                 params = struct.unpack('d' * num_params, f.read(8 * num_params))
                 self.cameras[camera_id] = Camera(camera_type, w, h, params)
+                self.last_camera_id = max(self.last_camera_id, camera_id)
 
     def _load_cameras_txt(self, input_file):
         self.cameras = dict()
@@ -112,8 +116,10 @@ class SceneManager:
                     continue
 
                 data = line.split()
-                self.cameras[int(data[0])] = Camera(
+                camera_id = int(data[0])
+                self.cameras[camera_id] = Camera(
                     data[1], int(data[2]), int(data[3]), map(float, data[4:]))
+                self.last_camera_id = max(self.last_camera_id, camera_id)
 
     #---------------------------------------------------------------------------
 
@@ -161,6 +167,8 @@ class SceneManager:
                 self.images[image_id] = image
                 self.name_to_image_id[image.name] = image_id
 
+                self.last_image_id = max(self.last_image_id, image_id)
+
     def _load_images_txt(self, input_file):
         self.images = dict()
 
@@ -192,6 +200,8 @@ class SceneManager:
 
                     self.images[image_id] = image
                     self.name_to_image_id[image.name] = image_id
+
+                    self.last_image_id = max(self.last_image_id, image_id)
 
     #---------------------------------------------------------------------------
 
@@ -525,6 +535,20 @@ class SceneManager:
             (points2D[:,1] < camera.height - 1))
 
         return points2D[mask,:], points3D[mask,:]
+
+    #---------------------------------------------------------------------------
+
+    def add_camera(self, camera):
+        self.last_camera_id += 1
+        self.cameras[self.last_camera_id] = camera
+        return self.last_camera_id
+
+    #---------------------------------------------------------------------------
+
+    def add_image(self, image):
+        self.last_image_id += 1
+        self.images[self.last_image_id] = image
+        return self.last_image_id
 
     #---------------------------------------------------------------------------
 

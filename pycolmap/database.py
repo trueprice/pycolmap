@@ -66,7 +66,10 @@ CREATE_INLIER_MATCHES_TABLE = """CREATE TABLE IF NOT EXISTS inlier_matches (
     rows INTEGER NOT NULL,
     cols INTEGER NOT NULL,
     data BLOB,
-    config INTEGER NOT NULL)"""
+    config INTEGER NOT NULL,
+    F BLOB,
+    E BLOB,
+    H BLOB)"""
 
 CREATE_KEYPOINTS_TABLE = """CREATE TABLE IF NOT EXISTS keypoints (
     image_id INTEGER PRIMARY KEY NOT NULL,
@@ -93,9 +96,9 @@ CREATE_ALL = "; ".join([CREATE_CAMERAS_TABLE, CREATE_DESCRIPTORS_TABLE,
 # functional interface for adding objects
 
 def add_camera(db, model, width, height, params, prior_focal_length=False,
-        camera_id=None):
+               camera_id=None):
     # TODO: Parameter count checks
-    params = np.asarray(params, np.float32)
+    params = np.asarray(params, np.float64)
     db.execute("INSERT INTO cameras VALUES (?, ?, ?, ?, ?, ?)",
         (camera_id, model, width, height, array_to_blob(params),
          prior_focal_length))
@@ -115,17 +118,25 @@ def add_image(db, name, camera_id, prior_q=np.zeros(4), prior_t=np.zeros(3),
 
 
 # config: defaults to fundamental matrix
-def add_inlier_matches(db, image_id1, image_id2, matches, config=2):
+def add_inlier_matches(db, image_id1, image_id2, matches, config=2, F=None,
+                       E=None, H=None):
     assert(len(matches.shape) == 2)
     assert(matches.shape[1] == 2)
 
     if image_id1 > image_id2:
         matches = matches[:,::-1]
 
+    if F is not None:
+        F = np.asarray(F, np.float64)
+    if E is not None:
+        E = np.asarray(E, np.float64)
+    if H is not None:
+        H = np.asarray(H, np.float64)
+
     pair_id = get_pair_id(image_id1, image_id2)
     matches = np.asarray(matches, np.uint32)
-    db.execute("INSERT INTO inlier_matches VALUES (?, ?, ?, ?, ?)",
-        (pair_id,) + matches.shape + (array_to_blob(matches), config))
+    db.execute("INSERT INTO inlier_matches VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (pair_id,) + matches.shape + (array_to_blob(matches), config, F, E, H))
 
 
 def add_keypoints(db, image_id, keypoints):
