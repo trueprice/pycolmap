@@ -7,25 +7,26 @@ from scipy.optimize import root
 
 #-------------------------------------------------------------------------------
 #
-# camera distortion functions
+# camera distortion functions for arrays of size (..., 2)
 #
 #-------------------------------------------------------------------------------
 
 def simple_radial_distortion(camera, x):
-    return x * (1. + camera.k1 * np.square(x).sum(axis=1)[:,np.newaxis])
+    return x * (1. + camera.k1 * np.square(x).sum(axis=-1, keepdims=True))
 
 def radial_distortion(camera, x):
-    r_sq = np.square(x).sum(axis=1)[:,np.newaxis]
+    r_sq = np.square(x).sum(axis=-1, keepdims=True)
     return x * (1. + r_sq * (camera.k1 + camera.k2 * r_sq))
 
 def opencv_distortion(camera, x):
     x_sq = np.square(x)
-    xy = (x[:,0] * x[:,1])[:,np.newaxis]
-    r_sq = x_sq.sum(axis=1)[:,np.newaxis]
+    xy = np.prod(x, axis=-1, keepdims=True)
+    r_sq = x_sq.sum(axis=-1, keepdims=True)
 
-    return x * (1. + r_sq * (camera.k1 + camera.k2 * r_sq)) + np.column_stack((
+    return x * (1. + r_sq * (camera.k1 + camera.k2 * r_sq)) + np.concatenate((
         2. * camera.p1 * xy + camera.p2 * (r_sq + 2. * x_sq),
-        camera.p1 * (r_sq + 2. * y_sq) + 2. * camera.p2 * xy))
+        camera.p1 * (r_sq + 2. * y_sq) + 2. * camera.p2 * xy),
+        axis=-1)
 
 
 #-------------------------------------------------------------------------------
@@ -35,8 +36,6 @@ def opencv_distortion(camera, x):
 #-------------------------------------------------------------------------------
 
 class Camera:
-    # TODO (True): some confusion about which camera model is which -- make sure
-    # you're using the latest version of COLMAP!
     @staticmethod
     def GetNumParams(type_):
         if type_ == 0 or type_ == 'SIMPLE_PINHOLE':
@@ -166,14 +165,23 @@ class Camera:
 
     #---------------------------------------------------------------------------
 
-    # return the camera matrix
     def get_camera_matrix(self):
         return np.array(
             ((self.fx, 0, self.cx), (0, self.fy, self.cy), (0, 0, 1)))
 
+    def get_inverse_camera_matrix(self):
+        return np.array(
+            ((1. / self.fx, 0, -self.cx / self.fx),
+             (0, 1. / self.fy, -self.cy / self.fy),
+             (0, 0, 1)))
+
     @property
     def K(self):
         return self.get_camera_matrix()
+
+    @property
+    def K_inv(self):
+        return self.get_inverse_camera_matrix()
 
     #---------------------------------------------------------------------------
 
@@ -189,9 +197,12 @@ class Camera:
 
     # return an (x, y) pixel coordinate grid for this camera
     def get_image_grid(self):
-        return np.meshgrid(
-            (np.arange(self.width)  - self.cx) / self.fx,
-            (np.arange(self.height) - self.cy) / self.fy)
+        xmin = (0.5 - self.cx) / self.fx
+        xmax = (self.width - 0.5 - self.cx) / self.fx
+        ymin = (0.5 - self.cy) / self.fy
+        ymax = (self.height - 0.5 - self.cy) / self.fy
+        return np.meshgrid(np.linspace(xmin, xmax, self.width),
+                           np.linspace(ymin, ymax, self.height))
 
 
     #---------------------------------------------------------------------------
@@ -220,7 +231,7 @@ class Camera:
 
     #---------------------------------------------------------------------------
 
-    # x: array of shape (N,2) or (2,)
+    # x: array of shape (N1,N2,...,2), (N,2), or (2,)
     # normalized: False if the input points are in pixel coordinates
     # denormalize: True if the points should be put back into pixel coordinates
     def undistort_points(self, x, normalized=False, denormalize=True):
@@ -228,16 +239,16 @@ class Camera:
 
         # put the points into normalized camera coordinates
         if not normalized:
-            x -= np.array([[self.cx, self.cy]])
-            x /= np.array([[self.fx, self.fy]])
+            x = x - np.array([self.cx, self.cy]) # creates a copy
+            x /= np.array([self.fx, self.fy])
 
         # undistort, if necessary
         if self.distortion_func is not None:
             def objective(xu):
-                xu = xu.reshape(-1, 2)
-                return (x - self.distortion_func(self, xu)).flatten()
+                return (x - self.distortion_func(self, xu.reshape(*x.shape))
+                    ).ravel()
 
-            xu = root(objective, x).x.reshape(-1, 2)
+            xu = root(objective, x).x.reshape(*x.shape)
         else:
             xu = x
             

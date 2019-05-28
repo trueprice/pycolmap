@@ -17,7 +17,7 @@ def main(args):
         images = sorted(
             scene_manager.images.itervalues(), key=lambda im: im.name)
     else:
-        images = scene_manager.images.itervalues
+        images = scene_manager.images.values()
 
     fid = open(args.output_file, "w")
     fid_filenames = open(args.output_file + ".list.txt", "w")

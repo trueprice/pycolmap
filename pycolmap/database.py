@@ -61,7 +61,7 @@ CREATE_IMAGES_TABLE = """CREATE TABLE IF NOT EXISTS images (
     CONSTRAINT image_id_check CHECK(image_id >= 0 and image_id < 2147483647),
     FOREIGN KEY(camera_id) REFERENCES cameras(camera_id))"""
 
-CREATE_INLIER_MATCHES_TABLE = """CREATE TABLE IF NOT EXISTS inlier_matches (
+CREATE_INLIER_MATCHES_TABLE = """CREATE TABLE IF NOT EXISTS two_view_geometries (
     pair_id INTEGER PRIMARY KEY NOT NULL,
     rows INTEGER NOT NULL,
     cols INTEGER NOT NULL,

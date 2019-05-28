@@ -4,6 +4,7 @@ import numpy as np
 import os
 import struct
 
+from collections import OrderedDict
 from itertools import combinations
 from cStringIO import StringIO
 
@@ -17,9 +18,9 @@ from rotation import Quaternion
 #
 #-------------------------------------------------------------------------------
 
-INVALID_POINT3D = np.uint64(-1)
-
 class SceneManager:
+    INVALID_POINT3D = np.uint64(-1)
+
     def __init__(self, colmap_results_folder, image_path=None):
         self.folder = colmap_results_folder
         if not self.folder.endswith('/'):
@@ -28,8 +29,8 @@ class SceneManager:
         self.image_path = None
         self.load_colmap_project_file(image_path=image_path)
 
-        self.cameras = dict()
-        self.images = dict()
+        self.cameras = OrderedDict()
+        self.images = OrderedDict()
         self.name_to_image_id = dict()
 
         self.last_camera_id = 0
@@ -95,7 +96,7 @@ class SceneManager:
                     raise IOError('no cameras file found')
     
     def _load_cameras_bin(self, input_file):
-        self.cameras = dict()
+        self.cameras = OrderedDict()
 
         with open(input_file, 'rb') as f:
             num_cameras = struct.unpack('L', f.read(8))[0]
@@ -108,7 +109,7 @@ class SceneManager:
                 self.last_camera_id = max(self.last_camera_id, camera_id)
 
     def _load_cameras_txt(self, input_file):
-        self.cameras = dict()
+        self.cameras = OrderedDict()
 
         with open(input_file, 'r') as f:
             for line in iter(lambda: f.readline().strip(), ''):
@@ -136,7 +137,7 @@ class SceneManager:
                     raise IOError('no images file found')
 
     def _load_images_bin(self, input_file):
-        self.images = dict()
+        self.images = OrderedDict()
 
         with open(input_file, 'rb') as f:
             num_images = struct.unpack('L', f.read(8))[0]
@@ -160,7 +161,7 @@ class SceneManager:
                 image.point3D_ids = tmp["id"]
 
                 # automatically remove points without an associated 3D point
-                #mask = (image.point3D_ids != INVALID_POINT3D)
+                #mask = (image.point3D_ids != SceneManager.INVALID_POINT3D)
                 #image.points2D = image.points2D[mask]
                 #image.point3D_ids = image.point3D_ids[mask]
 
@@ -170,7 +171,7 @@ class SceneManager:
                 self.last_image_id = max(self.last_image_id, image_id)
 
     def _load_images_txt(self, input_file):
-        self.images = dict()
+        self.images = OrderedDict()
 
         with open(input_file, 'r') as f:
             is_camera_description_line = False
@@ -194,7 +195,7 @@ class SceneManager:
                     image.point3D_ids = np.array(map(np.uint64, data[2::3]))
 
                     # automatically remove points without an associated 3D point
-                    #mask = (image.point3D_ids != INVALID_POINT3D)
+                    #mask = (image.point3D_ids != SceneManager.INVALID_POINT3D)
                     #image.points2D = image.points2D[mask]
                     #image.point3D_ids = image.point3D_ids[mask]
 
@@ -390,7 +391,7 @@ class SceneManager:
     def _save_points3D_bin(self, output_file):
         num_valid_points3D = sum(
             1 for point3D_idx in self.point3D_id_to_point3D_idx.itervalues()
-            if point3D_idx != INVALID_POINT3D)
+            if point3D_idx != SceneManager.INVALID_POINT3D)
 
         iter_point3D_id_to_point3D_idx = \
             self.point3D_id_to_point3D_idx.iteritems()
@@ -399,7 +400,7 @@ class SceneManager:
             fid.write(struct.pack('L', num_valid_points3D))
 
             for point3D_id, point3D_idx in iter_point3D_id_to_point3D_idx:
-                if point3D_idx == INVALID_POINT3D:
+                if point3D_idx == SceneManager.INVALID_POINT3D:
                     continue
 
                 fid.write(struct.pack('L', point3D_id))
@@ -413,7 +414,7 @@ class SceneManager:
     def _save_points3D_txt(self, output_file):
         num_valid_points3D = sum(
             1 for point3D_idx in self.point3D_id_to_point3D_idx.itervalues()
-            if point3D_idx != INVALID_POINT3D)
+            if point3D_idx != SceneManager.INVALID_POINT3D)
 
         array_to_string = lambda arr: ' '.join(str(x) for x in arr)
 
@@ -428,7 +429,7 @@ class SceneManager:
             print>>fid, 'mean track length: unknown'
 
             for point3D_id, point3D_idx in iter_point3D_id_to_point3D_idx:
-                if point3D_idx == INVALID_POINT3D:
+                if point3D_idx == SceneManager.INVALID_POINT3D:
                     continue
 
                 print>>fid, point3D_id,
@@ -455,12 +456,13 @@ class SceneManager:
     def get_points3D(self, image_id, return_points2D=True, return_colors=False):
         image = self.images[image_id]
 
-        mask = (image.point3D_ids != INVALID_POINT3D)
+        mask = (image.point3D_ids != SceneManager.INVALID_POINT3D)
 
         point3D_idxs = np.array([
             self.point3D_id_to_point3D_idx[point3D_id]
             for point3D_id in image.point3D_ids[mask]])
-        filter_mask = (point3D_idxs != INVALID_POINT3D) # detect filtered points
+        # detect filtered points
+        filter_mask = (point3D_idxs != SceneManager.INVALID_POINT3D)
         point3D_idxs = point3D_idxs[filter_mask]
         result = [self.points3D[point3D_idxs,:]]
 
@@ -475,14 +477,15 @@ class SceneManager:
     #---------------------------------------------------------------------------
 
     def point3D_valid(self, point3D_id):
-        return (self.point3D_id_to_point3D_idx[point3D_id] != INVALID_POINT3D)
+        return (self.point3D_id_to_point3D_idx[point3D_id] !=
+                SceneManager.INVALID_POINT3D)
 
     #---------------------------------------------------------------------------
 
     def get_filtered_points3D(self, return_colors=False):
         point3D_idxs = [
             idx for idx in self.point3D_id_to_point3D_idx.values()
-            if idx != INVALID_POINT3D]
+            if idx != SceneManager.INVALID_POINT3D]
         result = [self.points3D[point3D_idxs,:]]
         
         if return_colors:
@@ -497,7 +500,7 @@ class SceneManager:
         point3D_ids = (
                 set(self.images[image_id1].point3D_ids) &
                 set(self.images[image_id2].point3D_ids))
-        point3D_ids.discard(INVALID_POINT3D)
+        point3D_ids.discard(SceneManager.INVALID_POINT3D)
 
         point3D_idxs = np.array([self.point3D_id_to_point3D_idx[point3D_id]
             for point3D_id in point3D_ids])
@@ -513,7 +516,7 @@ class SceneManager:
 
         # get unfiltered points
         point3D_idxs = set(self.point3D_id_to_point3D_idx.itervalues())
-        point3D_idxs.discard(INVALID_POINT3D)
+        point3D_idxs.discard(SceneManager.INVALID_POINT3D)
         point3D_idxs = list(point3D_idxs)
         points3D = self.points3D[point3D_idxs,:]
 
@@ -566,7 +569,7 @@ class SceneManager:
             self.point3D_id_to_point3D_idx.iteritems()
 
         for point3D_id, point3D_idx in iter_point3D_id_to_point3D_idx:
-            if point3D_idx == INVALID_POINT3D:
+            if point3D_idx == SceneManager.INVALID_POINT3D:
                 continue
 
             mask = np.array([
@@ -576,7 +579,8 @@ class SceneManager:
                 self.point3D_id_to_images[point3D_id] = \
                     self.point3D_id_to_images[point3D_id][mask]
             else:
-                self.point3D_id_to_point3D_idx[point3D_id] = INVALID_POINT3D
+                self.point3D_id_to_point3D_idx[point3D_id] = \
+                    SceneManager.INVALID_POINT3D
 
     #---------------------------------------------------------------------------
 
@@ -599,7 +603,7 @@ class SceneManager:
         image_ids = []
 
         for point3D_id, point3D_idx in iter_point3D_id_to_point3D_idx:
-            if point3D_idx == INVALID_POINT3D:
+            if point3D_idx == SceneManager.INVALID_POINT3D:
                 continue
 
             if image_set or min_track_len > 0:
@@ -610,7 +614,8 @@ class SceneManager:
             if (len(image_ids) < min_track_len or
                       self.point3D_errors[point3D_idx] > max_error or
                       image_set and image_set.isdisjoint(image_ids)):
-                self.point3D_id_to_point3D_idx[point3D_id] = INVALID_POINT3D
+                self.point3D_id_to_point3D_idx[point3D_id] = \
+                    SceneManager.INVALID_POINT3D
 
             # find dot product between all camera viewing rays
             elif check_triangulation_angles:
@@ -620,24 +625,26 @@ class SceneManager:
                      for image_id in image_ids])
                 tvecs /= np.linalg.norm(tvecs, axis=-1)[:,np.newaxis]
 
-                cos_theta = np.array([u.dot(v) for u,v in combinations(tvecs, 2)])
+                cos_theta = np.array(
+                    [u.dot(v) for u,v in combinations(tvecs, 2)])
 
                 # min_prod = cos(maximum viewing angle), and vice versa
                 # if maximum viewing angle is too small or too large,
                 # don't add this point
                 if (np.min(cos_theta) > max_tri_prod or
                     np.max(cos_theta) < min_tri_prod):
-                    self.point3D_id_to_point3D_idx[point3D_id] = INVALID_POINT3D
+                    self.point3D_id_to_point3D_idx[point3D_id] = \
+                        SceneManager.INVALID_POINT3D
 
         # apply the filters to the image point3D_ids
         for image in self.images.itervalues():
             mask = np.array([
                 self.point3D_id_to_point3D_idx.get(point3D_id, 0) \
-                    == INVALID_POINT3D
+                    == SceneManager.INVALID_POINT3D
                 for point3D_id in image.point3D_ids])
-            image.point3D_ids[mask] = INVALID_POINT3D
+            image.point3D_ids[mask] = SceneManager.INVALID_POINT3D
 
-    #-------------------------------------------------------------------------------
+    #---------------------------------------------------------------------------
 
     # scene graph: {image_id: [image_id: #shared points]}
     def build_scene_graph(self):
