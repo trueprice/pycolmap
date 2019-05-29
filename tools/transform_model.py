@@ -18,11 +18,13 @@ def main(args):
 
     scene_manager.points3D[:] = scene_manager.points3D.dot(P[:,:3].T) + P[:,3]
 
-    # get rotation without any global scaling
-    q = ~(Quaternion.FromR(P[:,:3]).normalize())
+    # get rotation without any global scaling (assuming isotropic scaling)
+    scale = np.cbrt(np.linalg.det(P[:,:3]))
+    q_old_from_new = ~Quaternion.FromR(P[:,:3] / scale)
 
     for image in scene_manager.images.itervalues():
-        image.tvec = -image.R().dot(P[:,:3].dot(image.C()) + P[:,3])
+        image.q *= q_old_from_new
+        image.tvec = scale * image.tvec - image.R().dot(P[:,3])
 
     scene_manager.save(args.output_folder)
 
