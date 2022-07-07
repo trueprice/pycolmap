@@ -206,7 +206,7 @@ def main(args):
     import os
 
     if os.path.exists(args.database_path):
-        print "Error: database path already exists -- will not modify it."
+        print("Error: database path already exists -- will not modify it.")
         exit()
 
     db = COLMAPDatabase.connect(args.database_path)
